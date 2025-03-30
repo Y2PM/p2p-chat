@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v9*/
+    /* Dark mode styles: black background, green text, no white v10*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -181,9 +181,9 @@
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { 
-              urls: "turn:numb.viagenie.ca",
-              username: "webrtc@live.com",
-              credential: "muazkh"
+              urls: "turn:openrelay.metered.ca:80",
+              username: "openrelayproject",
+              credential: "openrelayproject"
             }
           ]
         };
@@ -292,13 +292,16 @@
     // Add enhanced ICE event logging to a given peer connection.
     function addPeerConnectionLogging(pc) {
       pc.onicecandidate = event => {
-        // Log whether candidate is IPv4 or IPv6.
         if (event.candidate) {
           const candidateStr = event.candidate.candidate;
           if (candidateStr.indexOf("::") !== -1) {
             logDebug("IPv6 Candidate", candidateStr);
           } else {
             logDebug("IPv4 Candidate", candidateStr);
+          }
+          // Log if this is a TURN relay candidate.
+          if (candidateStr.includes("typ relay")) {
+            logDebug("TURN relay candidate detected", candidateStr);
           }
         } else {
           logDebug("ICE candidate event", "No more candidates (gathering complete)");
