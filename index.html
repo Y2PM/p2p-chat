@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>P2P Chat Client</title>
   <style>
-    /* Dark mode (default) and light mode styles v2*/
+    /* Dark mode (default) and light mode styles v3*/
     body.dark {
       background-color: #121212;
       color: #e0e0e0;
@@ -28,8 +28,10 @@
       width: 100%;
       box-sizing: border-box;
     }
-    button {
-      cursor: pointer;
+    button.copy-btn {
+      width: auto;
+      padding: 6px 12px;
+      margin-bottom: 10px;
     }
     #chatLog {
       width: 100%;
@@ -68,37 +70,40 @@
 
   <h2>P2P Chat Client - Manual Signalling</h2>
   <div id="instructions" class="section">
-    <h3>Instructions</h3>
+    <h3>How to Use</h3>
     <ol>
-      <li><strong>Caller:</strong> Click "Create Offer" to generate an SDP offer. Copy the generated text and share it with your peer via WhatsApp, phone, etc.</li>
-      <li><strong>Callee:</strong> Paste the received Offer SDP into the "Callee" section and click "Create Answer". Copy the generated Answer SDP and send it back to the caller.</li>
-      <li><strong>Caller:</strong> Paste the Answer SDP into the "Caller" section and click "Accept Answer" to establish the connection.</li>
-      <li>Once connected, a "Connected: Ready to chat!" message will appear in the chat log.</li>
-      <li>You can send text messages and small file attachments (e.g., images).</li>
-      <li>Debug logs are printed to the browser console for troubleshooting.</li>
+      <li><strong>Caller:</strong> Click "Create Offer" to generate an SDP offer, then click "Copy Offer" and send it via email or another chat app to your peer.</li>
+      <li><strong>Callee:</strong> Paste the received Offer SDP into the "Paste Offer SDP" box and click "Create Answer". When the Answer SDP is generated, click "Copy Answer" and send it back to the caller.</li>
+      <li><strong>Caller:</strong> Paste the Answer SDP into the provided field and click "Accept Answer" to establish the connection.</li>
+      <li>Once connected, a “Connected: Ready to chat!” message will appear in the chat log. You may then exchange text messages and small file attachments.</li>
     </ol>
   </div>
 
+  <!-- Caller Section -->
   <div class="section">
     <h3>Caller (Create Offer)</h3>
     <button onclick="createOffer()">Create Offer</button>
-    <textarea id="offerSDP" placeholder="Your offer SDP (copy and send to your peer)" rows="5"></textarea>
-    <textarea id="answerSDP" placeholder="Paste answer SDP here" rows="5"></textarea>
+    <textarea id="offerSDP" placeholder="Your Offer SDP (will be generated here)" rows="5" readonly></textarea>
+    <button class="copy-btn" onclick="copyText('offerSDP')">Copy Offer</button>
+    <textarea id="answerSDP" placeholder="Paste Answer SDP here" rows="5"></textarea>
     <button onclick="acceptAnswer()">Accept Answer</button>
   </div>
 
+  <!-- Callee Section -->
   <div class="section">
     <h3>Callee (Create Answer)</h3>
-    <textarea id="offerSDP_in" placeholder="Paste offer SDP here" rows="5"></textarea>
+    <textarea id="offerSDP_in" placeholder="Paste Offer SDP here" rows="5"></textarea>
     <button onclick="createAnswer()">Create Answer</button>
-    <textarea id="answerSDP_out" placeholder="Your answer SDP (copy and send back)" rows="5"></textarea>
+    <textarea id="answerSDP_out" placeholder="Your Answer SDP (will be generated here)" rows="5" readonly></textarea>
+    <button class="copy-btn" onclick="copyText('answerSDP_out')">Copy Answer</button>
   </div>
 
+  <!-- Chat Section -->
   <div class="section">
     <h3>Chat</h3>
     <div id="chatLog"></div>
     <input type="text" id="msgInput" placeholder="Type your message here">
-    <button onclick="sendMessage()">Send</button>
+    <button onclick="sendMessage()">Send Message</button>
     <input type="file" id="fileInput">
     <button onclick="sendFile()">Send File</button>
   </div>
@@ -114,6 +119,16 @@
       chatLog.innerHTML += `<div>${msg}</div>`;
       chatLog.scrollTop = chatLog.scrollHeight;
       console.log("Chat Log:", msg);
+    }
+
+    // Copy text from a given textarea ID
+    function copyText(elementId) {
+      const text = document.getElementById(elementId).value;
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Copied to clipboard!");
+      }).catch(err => {
+        console.error("Copy failed:", err);
+      });
     }
 
     // Toggle between dark and light mode
@@ -133,7 +148,7 @@
     // Setup the data channel event handlers with debugging logs
     function setupDataChannel() {
       dataChannel.onopen = () => {
-        logMessage("<em>DataChannel is open</em>");
+        logMessage("<em>DataChannel is open. Connected: Ready to chat!</em>");
         console.log("DataChannel opened");
       };
       dataChannel.onmessage = event => {
@@ -222,6 +237,17 @@
     function createAnswer() {
       console.log("Creating answer...");
       pc = new RTCPeerConnection(configuration);
+      
+      // Set ICE candidate handler immediately
+      pc.onicecandidate = event => {
+        console.log("ICE candidate event (callee):", event);
+        if (!event.candidate) {
+          const answerSDP = JSON.stringify(pc.localDescription);
+          document.getElementById('answerSDP_out').value = answerSDP;
+          console.log("Answer SDP ready:", answerSDP);
+        }
+      };
+
       pc.ondatachannel = event => {
         dataChannel = event.channel;
         setupDataChannel();
@@ -240,16 +266,6 @@
             .then(answer => {
               console.log("Answer created:", answer);
               return pc.setLocalDescription(answer).then(() => answer);
-            })
-            .then(answer => {
-              pc.onicecandidate = event => {
-                console.log("ICE candidate event (callee):", event);
-                if (!event.candidate) {
-                  const answerSDP = JSON.stringify(pc.localDescription);
-                  document.getElementById('answerSDP_out').value = answerSDP;
-                  console.log("Answer SDP ready:", answerSDP);
-                }
-              };
             })
             .catch(err => {
               console.error("Error creating answer:", err);
