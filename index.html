@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v7*/
+    /* Dark mode styles: black background, green text, no white v8*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -169,12 +169,25 @@
     // Global variables for the peer connection, data channel, role, and logging
     let pc, dataChannel, role = "";
     let logsEnabled = true;
-    let useLocalMode = false; // default: use STUN server
+    let useLocalMode = false; // default: use STUN + TURN
     let debugLogContent = "";
     
     // Get configuration based on local mode.
     function getConfiguration() {
-      return useLocalMode ? { iceServers: [] } : { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+      if (useLocalMode) {
+        return { iceServers: [] };
+      } else {
+        return {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { 
+              urls: "turn:numb.viagenie.ca",
+              username: "webrtc@live.com",
+              credential: "muazkh"
+            }
+          ]
+        };
+      }
     }
 
     // Update configuration based on checkbox state.
