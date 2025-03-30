@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v10*/
+    /* Dark mode styles: black background, green text, no white v11*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -299,7 +299,6 @@
           } else {
             logDebug("IPv4 Candidate", candidateStr);
           }
-          // Log if this is a TURN relay candidate.
           if (candidateStr.includes("typ relay")) {
             logDebug("TURN relay candidate detected", candidateStr);
           }
@@ -374,6 +373,14 @@
         .then(() => {
           console.log("Local description set for offer:", pc.localDescription);
           logDebug("Local description set for offer", pc.localDescription);
+          // Fallback: update SDP after 5 seconds if not already set.
+          setTimeout(() => {
+            if (!document.getElementById('offerSDP').value) {
+              const fallbackSDP = JSON.stringify(pc.localDescription);
+              document.getElementById('offerSDP').value = fallbackSDP;
+              logDebug("Offer SDP fallback update", fallbackSDP);
+            }
+          }, 5000);
         })
         .catch(err => {
           console.error("Error creating offer:", err);
@@ -433,6 +440,16 @@
             .then(answer => {
               logDebug("Answer created", answer);
               return pc.setLocalDescription(answer).then(() => answer);
+            })
+            .then(() => {
+              // Fallback: update SDP after 5 seconds if not already set.
+              setTimeout(() => {
+                if (!document.getElementById('answerSDP_out').value) {
+                  const fallbackSDP = JSON.stringify(pc.localDescription);
+                  document.getElementById('answerSDP_out').value = fallbackSDP;
+                  logDebug("Answer SDP fallback update", fallbackSDP);
+                }
+              }, 5000);
             })
             .catch(err => {
               console.error("Error creating answer:", err);
