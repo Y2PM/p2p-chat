@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v5*/
+    /* Dark mode styles: black background, green text, no white v6*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -67,6 +67,23 @@
       text-align: right;
       margin-bottom: 10px;
     }
+    #debugContainer {
+      border: 1px solid #444;
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+      background: #111;
+      color: #00ff00;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .copy-feedback {
+      font-size: 0.9rem;
+      margin-left: 10px;
+      color: #00ff00;
+    }
     @media (min-width: 600px) {
       .flex-container {
         display: flex;
@@ -81,6 +98,13 @@
 <body class="dark">
   <div class="toggle-container">
     <button onclick="toggleDarkMode()">Toggle Dark/Light Mode</button>
+    &nbsp;&nbsp;
+    <button id="toggleLogsBtn" onclick="toggleLogs()">Toggle Logs</button>
+    &nbsp;&nbsp;
+    <label>
+      <input type="checkbox" id="localModeCheckbox" onchange="updateConfiguration()">
+      Local Mode (host candidates only)
+    </label>
   </div>
 
   <h2>P2P Chat Client - Manual Signalling</h2>
@@ -99,7 +123,9 @@
     <h3>Caller (Create Offer)</h3>
     <button onclick="createOffer()">Create Offer</button>
     <textarea id="offerSDP" placeholder="Your Offer SDP (will be generated here)" rows="5" readonly></textarea>
-    <button class="copy-btn" onclick="copyText('offerSDP')">Copy Offer</button>
+    <button class="copy-btn" onclick="copyText('offerSDP', 'copyFeedback_offer')">Copy Offer</button>
+    <span id="copyFeedback_offer" class="copy-feedback"></span>
+    <br>
     <textarea id="answerSDP" placeholder="Paste Answer SDP here" rows="5"></textarea>
     <button onclick="acceptAnswer()">Accept Answer</button>
   </div>
@@ -110,7 +136,8 @@
     <textarea id="offerSDP_in" placeholder="Paste Offer SDP here" rows="5"></textarea>
     <button onclick="createAnswer()">Create Answer</button>
     <textarea id="answerSDP_out" placeholder="Your Answer SDP (will be generated here)" rows="5" readonly></textarea>
-    <button class="copy-btn" onclick="copyText('answerSDP_out')">Copy Answer</button>
+    <button class="copy-btn" onclick="copyText('answerSDP_out', 'copyFeedback_answer')">Copy Answer</button>
+    <span id="copyFeedback_answer" class="copy-feedback"></span>
   </div>
 
   <!-- Chat Section -->
@@ -119,39 +146,68 @@
     <div id="chatLog"></div>
     <input type="text" id="msgInput" placeholder="Type your message here">
     <button onclick="sendMessage()">Send Message</button>
+    <br>
     <input type="file" id="fileInput">
     <button onclick="sendFile()">Send File</button>
   </div>
 
-  <script>
-    // Global variables for the peer connection, data channel, and role
-    let pc, dataChannel, role = "";
-    const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+  <!-- Debug Log Section -->
+  <div class="section" id="debugSection">
+    <h3>Debug Logs <button class="copy-btn" onclick="copyLogs()">Copy Logs</button></h3>
+    <div id="debugContainer"></div>
+  </div>
 
-    // Enhanced logging helper
-    function logDebug(label, obj) {
-      console.log(label, obj);
+  <script>
+    // Global variables for the peer connection, data channel, role, and logging
+    let pc, dataChannel, role = "";
+    let logsEnabled = true;
+    let useLocalMode = false; // default: use STUN
+    let debugLogContent = "";
+    
+    // Get configuration based on local mode
+    function getConfiguration() {
+      return useLocalMode ? { iceServers: [] } : { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
     }
 
-    // Utility function to log messages to the chat area and console
+    // Update configuration based on checkbox state
+    function updateConfiguration() {
+      useLocalMode = document.getElementById('localModeCheckbox').checked;
+      logDebug("Configuration updated. Local Mode: " + useLocalMode);
+    }
+
+    // Enhanced logging helper: logs to console and debug container if enabled.
+    function logDebug(label, obj) {
+      const msg = label + " " + (obj ? JSON.stringify(obj) : "");
+      console.log(msg);
+      if (logsEnabled) {
+        debugLogContent += msg + "\n";
+        document.getElementById('debugContainer').textContent = debugLogContent;
+      }
+    }
+
+    // Utility function to log messages to the chat area and console.
     function logMessage(msg) {
       const chatLog = document.getElementById('chatLog');
       chatLog.innerHTML += `<div>${msg}</div>`;
       chatLog.scrollTop = chatLog.scrollHeight;
       console.log("Chat Log:", msg);
+      // Also add to debug logs.
+      logDebug("Chat Log:", msg);
     }
 
-    // Copy text from a given textarea ID
-    function copyText(elementId) {
+    // Copy text from a given textarea ID and display non-intrusive feedback.
+    function copyText(elementId, feedbackId) {
       const text = document.getElementById(elementId).value;
       navigator.clipboard.writeText(text).then(() => {
-        alert("Copied to clipboard!");
+        const feedbackEl = document.getElementById(feedbackId);
+        feedbackEl.textContent = "Copied!";
+        setTimeout(() => feedbackEl.textContent = "", 2000);
       }).catch(err => {
         console.error("Copy failed:", err);
       });
     }
 
-    // Toggle between dark and light mode
+    // Toggle between dark and light mode.
     function toggleDarkMode() {
       const body = document.body;
       if (body.classList.contains('dark')) {
@@ -165,7 +221,24 @@
       }
     }
 
-    // Setup the data channel event handlers with enhanced debugging logs
+    // Toggle debug logs visibility.
+    function toggleLogs() {
+      logsEnabled = !logsEnabled;
+      document.getElementById('debugSection').style.display = logsEnabled ? "block" : "none";
+      console.log("Logs " + (logsEnabled ? "enabled" : "disabled"));
+    }
+
+    // Copy logs from debug container.
+    function copyLogs() {
+      const logs = debugLogContent;
+      navigator.clipboard.writeText(logs).then(() => {
+        alert("Logs copied to clipboard!");
+      }).catch(err => {
+        console.error("Copy logs failed:", err);
+      });
+    }
+
+    // Setup the data channel event handlers with enhanced debugging logs.
     function setupDataChannel() {
       dataChannel.onopen = () => {
         logMessage("<em>DataChannel is open. Connected: Ready to chat!</em>");
@@ -187,14 +260,15 @@
       };
       dataChannel.onerror = error => {
         console.error("DataChannel error:", error);
+        logDebug("DataChannel error:", error);
       };
       dataChannel.onclose = () => {
         logMessage("<em>DataChannel closed</em>");
-        console.log("DataChannel closed");
+        logDebug("DataChannel closed");
       };
     }
 
-    // Add enhanced ICE event logging to a given peer connection
+    // Add enhanced ICE event logging to a given peer connection.
     function addPeerConnectionLogging(pc) {
       pc.onicecandidate = event => {
         logDebug("ICE candidate event", event);
@@ -223,17 +297,18 @@
       if ('onicecandidateerror' in pc) {
         pc.onicecandidateerror = event => {
           console.error("ICE Candidate Error:", event);
+          logDebug("ICE Candidate Error", event);
         };
       }
     }
 
     // --- Signalling Functions ---
 
-    // Caller: Create an offer and wait for ICE gathering to complete
+    // Caller: Create an offer and wait for ICE gathering to complete.
     function createOffer() {
       role = "caller";
       console.log("Creating offer...");
-      pc = new RTCPeerConnection(configuration);
+      pc = new RTCPeerConnection(getConfiguration());
       addPeerConnectionLogging(pc);
       dataChannel = pc.createDataChannel("chat");
       setupDataChannel();
@@ -252,13 +327,15 @@
         })
         .then(() => {
           console.log("Local description set for offer:", pc.localDescription);
+          logDebug("Local description set for offer", pc.localDescription);
         })
         .catch(err => {
           console.error("Error creating offer:", err);
+          logDebug("Error creating offer", err);
         });
     }
 
-    // Caller: Accept the answer provided by the peer
+    // Caller: Accept the answer provided by the peer.
     function acceptAnswer() {
       const answer = document.getElementById('answerSDP').value;
       if (answer) {
@@ -267,29 +344,34 @@
           pc.setRemoteDescription(answerDesc)
             .then(() => {
               console.log("Remote description set with answer");
+              logDebug("Remote description set with answer", answerDesc);
             })
             .catch(err => {
               console.error("Error setting remote description:", err);
+              logDebug("Error setting remote description", err);
             });
         } catch (e) {
           console.error("Invalid answer SDP format:", e);
+          logDebug("Invalid answer SDP format", e);
         }
       } else {
         console.error("No answer SDP provided");
+        logDebug("No answer SDP provided");
       }
     }
 
-    // Callee: Create an answer from a pasted offer
+    // Callee: Create an answer from a pasted offer.
     function createAnswer() {
       role = "callee";
       console.log("Creating answer...");
-      pc = new RTCPeerConnection(configuration);
+      pc = new RTCPeerConnection(getConfiguration());
       addPeerConnectionLogging(pc);
       
       pc.ondatachannel = event => {
         dataChannel = event.channel;
         setupDataChannel();
         console.log("DataChannel received from caller");
+        logDebug("DataChannel received from caller");
       };
 
       const offer = document.getElementById('offerSDP_in').value;
@@ -299,6 +381,7 @@
           pc.setRemoteDescription(offerDesc)
             .then(() => {
               console.log("Remote description set with offer");
+              logDebug("Remote description set with offer", offerDesc);
               return pc.createAnswer();
             })
             .then(answer => {
@@ -307,18 +390,21 @@
             })
             .catch(err => {
               console.error("Error creating answer:", err);
+              logDebug("Error creating answer", err);
             });
         } catch (e) {
           console.error("Invalid offer SDP format:", e);
+          logDebug("Invalid offer SDP format", e);
         }
       } else {
         console.error("No offer SDP provided");
+        logDebug("No offer SDP provided");
       }
     }
 
     // --- Chat Functions ---
 
-    // Send a text message over the data channel
+    // Send a text message over the data channel.
     function sendMessage() {
       const msgInput = document.getElementById('msgInput');
       const msg = msgInput.value;
@@ -330,10 +416,11 @@
         msgInput.value = "";
       } else {
         console.error("DataChannel not open or message is empty.");
+        logDebug("DataChannel not open or message is empty.");
       }
     }
 
-    // Send a file as a Data URL (suitable for small attachments)
+    // Send a file as a Data URL (suitable for small attachments).
     function sendFile() {
       const fileInput = document.getElementById('fileInput');
       if (fileInput.files.length > 0 && dataChannel && dataChannel.readyState === "open") {
@@ -348,10 +435,12 @@
         };
         reader.onerror = error => {
           console.error("Error reading file:", error);
+          logDebug("Error reading file", error);
         };
         reader.readAsDataURL(file);
       } else {
         console.error("No file selected or DataChannel not open.");
+        logDebug("No file selected or DataChannel not open.");
       }
     }
   </script>
