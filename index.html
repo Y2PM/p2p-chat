@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>P2P Chat Client</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    textarea { width: 100%; margin-bottom: 10px; }
+    #chatLog {
+      width: 100%; height: 300px; border: 1px solid #ccc;
+      padding: 5px; overflow-y: scroll; margin-bottom: 10px;
+      background: #f9f9f9;
+    }
+    .section { border: 1px solid #ddd; padding: 10px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h2>P2P Chat Client</h2>
+
+  <!-- Caller Section: Create Offer v1-->
+  <div class="section">
+    <h3>Caller (Create Offer)</h3>
+    <button onclick="createOffer()">Create Offer</button>
+    <br>
+    <textarea id="offerSDP" placeholder="Your offer SDP (copy and send to your peer)" rows="5"></textarea>
+    <br>
+    <textarea id="answerSDP" placeholder="Paste answer SDP here" rows="5"></textarea>
+    <br>
+    <button onclick="acceptAnswer()">Accept Answer</button>
+  </div>
+
+  <!-- Callee Section: Create Answer -->
+  <div class="section">
+    <h3>Callee (Create Answer)</h3>
+    <textarea id="offerSDP_in" placeholder="Paste offer SDP here" rows="5"></textarea>
+    <br>
+    <button onclick="createAnswer()">Create Answer</button>
+    <br>
+    <textarea id="answerSDP_out" placeholder="Your answer SDP (copy and send back)" rows="5"></textarea>
+  </div>
+
+  <!-- Chat Section -->
+  <div class="section">
+    <h3>Chat</h3>
+    <div id="chatLog"></div>
+    <input type="text" id="msgInput" placeholder="Type your message here" style="width:80%;">
+    <button onclick="sendMessage()">Send</button>
+    <br><br>
+    <input type="file" id="fileInput">
+    <button onclick="sendFile()">Send File</button>
+  </div>
+
+  <script>
+    // Global variables for the peer connection and data channel
+    let pc, dataChannel;
+    const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+    // Utility function to log messages to the chat area
+    function logMessage(msg) {
+      const chatLog = document.getElementById('chatLog');
+      chatLog.innerHTML += `<div>${msg}</div>`;
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    // Setup the data channel event handlers
+    function setupDataChannel() {
+      dataChannel.onopen = () => logMessage("<em>DataChannel is open</em>");
+      dataChannel.onmessage = event => {
+        try {
+          const received = JSON.parse(event.data);
+          if (received.type === 'text') {
+            logMessage("<b>Peer:</b> " + received.data);
+          } else if (received.type === 'file') {
+            // Display file attachments (assuming image files)
+            logMessage(`<b>Peer sent file:</b> ${received.name}<br><img src="${received.data}" alt="${received.name}" style="max-width:200px;">`);
+          }
+        } catch (e) {
+          logMessage("Received: " + event.data);
+        }
+      };
+      dataChannel.onerror = error => console.error("DataChannel Error:", error);
+    }
+
+    // --- Signalling Functions ---
+
+    // Caller: Create an offer and wait for ICE gathering to complete
+    function createOffer() {
+      pc = new RTCPeerConnection(configuration);
+      dataChannel = pc.createDataChannel("chat");
+      setupDataChannel();
+
+      // When ICE gathering is complete, output the SDP offer
+      pc.onicecandidate = event => {
+        if (!event.candidate) {
+          document.getElementById('offerSDP').value = JSON.stringify(pc.localDescription);
+        }
+      };
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .catch(err => console.error(err));
+    }
+
+    // Caller: Accept the answer provided by the peer
+    function acceptAnswer() {
+      const answer = document.getElementById('answerSDP').value;
+      if (answer) {
+        const answerDesc = new RTCSessionDescription(JSON.parse(answer));
+        pc.setRemoteDescription(answerDesc).catch(err => console.error(err));
+      }
+    }
+
+    // Callee: Create an answer from a pasted offer
+    function createAnswer() {
+      pc = new RTCPeerConnection(configuration);
+      pc.ondatachannel = event => {
+        dataChannel = event.channel;
+        setupDataChannel();
+      };
+
+      const offer = document.getElementById('offerSDP_in').value;
+      if (offer) {
+        const offerDesc = new RTCSessionDescription(JSON.parse(offer));
+        pc.setRemoteDescription(offerDesc)
+          .then(() => pc.createAnswer())
+          .then(answer => pc.setLocalDescription(answer))
+          .then(() => {
+            pc.onicecandidate = event => {
+              if (!event.candidate) {
+                document.getElementById('answerSDP_out').value = JSON.stringify(pc.localDescription);
+              }
+            };
+          })
+          .catch(err => console.error(err));
+      }
+    }
+
+    // --- Chat Functions ---
+
+    // Send a text message over the data channel
+    function sendMessage() {
+      const msgInput = document.getElementById('msgInput');
+      const msg = msgInput.value;
+      if (msg && dataChannel && dataChannel.readyState === "open") {
+        const messageObj = { type: "text", data: msg };
+        dataChannel.send(JSON.stringify(messageObj));
+        logMessage("<b>You:</b> " + msg);
+        msgInput.value = "";
+      }
+    }
+
+    // Send a file as a Data URL (suitable for small attachments)
+    function sendFile() {
+      const fileInput = document.getElementById('fileInput');
+      if (fileInput.files.length > 0 && dataChannel && dataChannel.readyState === "open") {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = event => {
+          const fileData = event.target.result;
+          const messageObj = { type: "file", data: fileData, name: file.name };
+          dataChannel.send(JSON.stringify(messageObj));
+          logMessage("<b>You sent file:</b> " + file.name);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  </script>
+</body>
+</html>
