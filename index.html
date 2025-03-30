@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v6*/
+    /* Dark mode styles: black background, green text, no white v7*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -47,6 +47,11 @@
       width: auto;
       padding: 6px 12px;
       margin-bottom: 10px;
+    }
+    .copy-feedback {
+      font-size: 0.9rem;
+      margin-left: 10px;
+      color: #00ff00;
     }
     #chatLog {
       width: 100%;
@@ -79,11 +84,6 @@
       max-height: 200px;
       overflow-y: auto;
     }
-    .copy-feedback {
-      font-size: 0.9rem;
-      margin-left: 10px;
-      color: #00ff00;
-    }
     @media (min-width: 600px) {
       .flex-container {
         display: flex;
@@ -93,6 +93,12 @@
         flex: 1;
       }
     }
+    /* Inline container for local mode checkbox and label */
+    .inline-container {
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 20px;
+    }
   </style>
 </head>
 <body class="dark">
@@ -100,11 +106,10 @@
     <button onclick="toggleDarkMode()">Toggle Dark/Light Mode</button>
     &nbsp;&nbsp;
     <button id="toggleLogsBtn" onclick="toggleLogs()">Toggle Logs</button>
-    &nbsp;&nbsp;
-    <label>
+    <div class="inline-container">
       <input type="checkbox" id="localModeCheckbox" onchange="updateConfiguration()">
-      Local Mode (host candidates only)
-    </label>
+      <label for="localModeCheckbox">Local Mode (host candidates only)</label>
+    </div>
   </div>
 
   <h2>P2P Chat Client - Manual Signalling</h2>
@@ -153,7 +158,10 @@
 
   <!-- Debug Log Section -->
   <div class="section" id="debugSection">
-    <h3>Debug Logs <button class="copy-btn" onclick="copyLogs()">Copy Logs</button></h3>
+    <h3>Debug Logs 
+      <button class="copy-btn" onclick="copyLogs('copyFeedback_logs')">Copy Logs</button>
+      <span id="copyFeedback_logs" class="copy-feedback"></span>
+    </h3>
     <div id="debugContainer"></div>
   </div>
 
@@ -161,15 +169,15 @@
     // Global variables for the peer connection, data channel, role, and logging
     let pc, dataChannel, role = "";
     let logsEnabled = true;
-    let useLocalMode = false; // default: use STUN
+    let useLocalMode = false; // default: use STUN server
     let debugLogContent = "";
     
-    // Get configuration based on local mode
+    // Get configuration based on local mode.
     function getConfiguration() {
       return useLocalMode ? { iceServers: [] } : { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
     }
 
-    // Update configuration based on checkbox state
+    // Update configuration based on checkbox state.
     function updateConfiguration() {
       useLocalMode = document.getElementById('localModeCheckbox').checked;
       logDebug("Configuration updated. Local Mode: " + useLocalMode);
@@ -191,11 +199,10 @@
       chatLog.innerHTML += `<div>${msg}</div>`;
       chatLog.scrollTop = chatLog.scrollHeight;
       console.log("Chat Log:", msg);
-      // Also add to debug logs.
       logDebug("Chat Log:", msg);
     }
 
-    // Copy text from a given textarea ID and display non-intrusive feedback.
+    // Copy text from a given textarea ID and display inline feedback.
     function copyText(elementId, feedbackId) {
       const text = document.getElementById(elementId).value;
       navigator.clipboard.writeText(text).then(() => {
@@ -228,11 +235,12 @@
       console.log("Logs " + (logsEnabled ? "enabled" : "disabled"));
     }
 
-    // Copy logs from debug container.
-    function copyLogs() {
-      const logs = debugLogContent;
-      navigator.clipboard.writeText(logs).then(() => {
-        alert("Logs copied to clipboard!");
+    // Copy logs from debug container and show inline feedback.
+    function copyLogs(feedbackId) {
+      navigator.clipboard.writeText(debugLogContent).then(() => {
+        const feedbackEl = document.getElementById(feedbackId);
+        feedbackEl.textContent = "Logs Copied!";
+        setTimeout(() => feedbackEl.textContent = "", 2000);
       }).catch(err => {
         console.error("Copy logs failed:", err);
       });
@@ -260,7 +268,7 @@
       };
       dataChannel.onerror = error => {
         console.error("DataChannel error:", error);
-        logDebug("DataChannel error:", error);
+        logDebug("DataChannel error", error);
       };
       dataChannel.onclose = () => {
         logMessage("<em>DataChannel closed</em>");
@@ -274,22 +282,33 @@
         logDebug("ICE candidate event", event);
         if (!event.candidate) {
           // ICE gathering complete; update the appropriate SDP text area based on role.
-          if (role === "caller" && document.getElementById('offerSDP').value === "") {
+          if (role === "caller") {
             const offerSDP = JSON.stringify(pc.localDescription);
             document.getElementById('offerSDP').value = offerSDP;
             logDebug("Offer SDP ready", offerSDP);
-          } else if (role === "callee" && document.getElementById('answerSDP_out').value === "") {
+          } else if (role === "callee") {
             const answerSDP = JSON.stringify(pc.localDescription);
             document.getElementById('answerSDP_out').value = answerSDP;
             logDebug("Answer SDP ready", answerSDP);
           }
         }
       };
-      pc.oniceconnectionstatechange = () => {
-        logDebug("ICE connection state", pc.iceConnectionState);
-      };
       pc.onicegatheringstatechange = () => {
         logDebug("ICE gathering state", pc.iceGatheringState);
+        if (pc.iceGatheringState === "complete") {
+          if (role === "caller") {
+            const offerSDP = JSON.stringify(pc.localDescription);
+            document.getElementById('offerSDP').value = offerSDP;
+            logDebug("Offer SDP updated on gathering complete", offerSDP);
+          } else if (role === "callee") {
+            const answerSDP = JSON.stringify(pc.localDescription);
+            document.getElementById('answerSDP_out').value = answerSDP;
+            logDebug("Answer SDP updated on gathering complete", answerSDP);
+          }
+        }
+      };
+      pc.oniceconnectionstatechange = () => {
+        logDebug("ICE connection state", pc.iceConnectionState);
       };
       pc.onsignalingstatechange = () => {
         logDebug("Signaling state", pc.signalingState);
