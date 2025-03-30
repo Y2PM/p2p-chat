@@ -5,14 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>P2P Chat Client</title>
   <style>
-    /* Dark mode (default) and light mode styles v3*/
-    body.dark {
-      background-color: #121212;
-      color: #e0e0e0;
-    }
+    /* Light mode styles */
     body.light {
       background-color: #f0f0f0;
       color: #000;
+    }
+    body.light input, 
+    body.light textarea, 
+    body.light button {
+      background-color: #fff;
+      color: #000;
+      border: 1px solid #ccc;
+    }
+    
+    /* Dark mode styles: black background, green text, no white v4*/
+    body.dark {
+      background-color: #000;
+      color: #00ff00;
+    }
+    body.dark input, 
+    body.dark textarea, 
+    body.dark button {
+      background-color: #333;
+      color: #00ff00;
+      border: 1px solid #555;
     }
     body {
       font-family: Arial, sans-serif;
@@ -23,7 +39,6 @@
       font-size: 1rem;
       padding: 8px;
       border-radius: 4px;
-      border: 1px solid #ccc;
       margin-bottom: 10px;
       width: 100%;
       box-sizing: border-box;
@@ -39,8 +54,8 @@
       border: 1px solid #444;
       padding: 10px;
       overflow-y: auto;
-      background: #1e1e1e;
-      color: #fff;
+      background: #222;
+      color: #00ff00;
     }
     .section {
       border: 1px solid #444;
@@ -72,10 +87,10 @@
   <div id="instructions" class="section">
     <h3>How to Use</h3>
     <ol>
-      <li><strong>Caller:</strong> Click "Create Offer" to generate an SDP offer, then click "Copy Offer" and send it via email or another chat app to your peer.</li>
-      <li><strong>Callee:</strong> Paste the received Offer SDP into the "Paste Offer SDP" box and click "Create Answer". When the Answer SDP is generated, click "Copy Answer" and send it back to the caller.</li>
+      <li><strong>Caller:</strong> Click "Create Offer" to generate an SDP offer. Then click "Copy Offer" and send it via email or another chat app to your peer.</li>
+      <li><strong>Callee:</strong> Paste the received Offer SDP into the "Paste Offer SDP" box and click "Create Answer". When the Answer SDP appears, click "Copy Answer" and send it back to the caller.</li>
       <li><strong>Caller:</strong> Paste the Answer SDP into the provided field and click "Accept Answer" to establish the connection.</li>
-      <li>Once connected, a “Connected: Ready to chat!” message will appear in the chat log. You may then exchange text messages and small file attachments.</li>
+      <li>Once connected, a “Connected: Ready to chat!” message will appear in the chat log. You can then exchange text messages and small file attachments.</li>
     </ol>
   </div>
 
@@ -113,6 +128,11 @@
     let pc, dataChannel;
     const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
+    // Enhanced logging helper
+    function logDebug(label, obj) {
+      console.log(label, obj);
+    }
+
     // Utility function to log messages to the chat area and console
     function logMessage(msg) {
       const chatLog = document.getElementById('chatLog');
@@ -145,14 +165,14 @@
       }
     }
 
-    // Setup the data channel event handlers with debugging logs
+    // Setup the data channel event handlers with enhanced debugging logs
     function setupDataChannel() {
       dataChannel.onopen = () => {
         logMessage("<em>DataChannel is open. Connected: Ready to chat!</em>");
-        console.log("DataChannel opened");
+        logDebug("DataChannel opened", dataChannel);
       };
       dataChannel.onmessage = event => {
-        console.log("DataChannel message received:", event.data);
+        logDebug("DataChannel message received", event.data);
         try {
           const received = JSON.parse(event.data);
           if (received.type === 'text') {
@@ -174,26 +194,52 @@
       };
     }
 
+    // Add enhanced ICE event logging to a given peer connection
+    function addPeerConnectionLogging(pc) {
+      pc.onicecandidate = event => {
+        logDebug("ICE candidate event", event);
+        if (!event.candidate) {
+          // ICE gathering complete; update SDP text areas accordingly
+          if (document.getElementById('offerSDP').value === "") {
+            const offerSDP = JSON.stringify(pc.localDescription);
+            document.getElementById('offerSDP').value = offerSDP;
+            logDebug("Offer SDP ready", offerSDP);
+          } else if (document.getElementById('answerSDP_out').value === "") {
+            const answerSDP = JSON.stringify(pc.localDescription);
+            document.getElementById('answerSDP_out').value = answerSDP;
+            logDebug("Answer SDP ready", answerSDP);
+          }
+        }
+      };
+      pc.oniceconnectionstatechange = () => {
+        logDebug("ICE connection state", pc.iceConnectionState);
+      };
+      pc.onicegatheringstatechange = () => {
+        logDebug("ICE gathering state", pc.iceGatheringState);
+      };
+      pc.onsignalingstatechange = () => {
+        logDebug("Signaling state", pc.signalingState);
+      };
+      // If supported, log ICE candidate errors
+      if ('onicecandidateerror' in pc) {
+        pc.onicecandidateerror = event => {
+          console.error("ICE Candidate Error:", event);
+        };
+      }
+    }
+
     // --- Signalling Functions ---
 
     // Caller: Create an offer and wait for ICE gathering to complete
     function createOffer() {
       console.log("Creating offer...");
       pc = new RTCPeerConnection(configuration);
+      addPeerConnectionLogging(pc);
       dataChannel = pc.createDataChannel("chat");
       setupDataChannel();
 
-      pc.onicecandidate = event => {
-        console.log("ICE candidate event:", event);
-        if (!event.candidate) {
-          const offerSDP = JSON.stringify(pc.localDescription);
-          document.getElementById('offerSDP').value = offerSDP;
-          console.log("Offer SDP ready:", offerSDP);
-        }
-      };
-
       pc.onconnectionstatechange = () => {
-        console.log("Connection state change:", pc.connectionState);
+        logDebug("Connection state change", pc.connectionState);
         if (pc.connectionState === "connected") {
           logMessage("<em>Connected: Ready to chat!</em>");
         }
@@ -201,7 +247,7 @@
 
       pc.createOffer()
         .then(offer => {
-          console.log("Offer created:", offer);
+          logDebug("Offer created", offer);
           return pc.setLocalDescription(offer);
         })
         .then(() => {
@@ -237,17 +283,8 @@
     function createAnswer() {
       console.log("Creating answer...");
       pc = new RTCPeerConnection(configuration);
+      addPeerConnectionLogging(pc);
       
-      // Set ICE candidate handler immediately
-      pc.onicecandidate = event => {
-        console.log("ICE candidate event (callee):", event);
-        if (!event.candidate) {
-          const answerSDP = JSON.stringify(pc.localDescription);
-          document.getElementById('answerSDP_out').value = answerSDP;
-          console.log("Answer SDP ready:", answerSDP);
-        }
-      };
-
       pc.ondatachannel = event => {
         dataChannel = event.channel;
         setupDataChannel();
@@ -264,7 +301,7 @@
               return pc.createAnswer();
             })
             .then(answer => {
-              console.log("Answer created:", answer);
+              logDebug("Answer created", answer);
               return pc.setLocalDescription(answer).then(() => answer);
             })
             .catch(err => {
