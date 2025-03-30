@@ -18,7 +18,7 @@
       border: 1px solid #ccc;
     }
     
-    /* Dark mode styles: black background, green text, no white v4*/
+    /* Dark mode styles: black background, green text, no white v5*/
     body.dark {
       background-color: #000;
       color: #00ff00;
@@ -124,8 +124,8 @@
   </div>
 
   <script>
-    // Global variables for the peer connection and data channel
-    let pc, dataChannel;
+    // Global variables for the peer connection, data channel, and role
+    let pc, dataChannel, role = "";
     const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
     // Enhanced logging helper
@@ -199,12 +199,12 @@
       pc.onicecandidate = event => {
         logDebug("ICE candidate event", event);
         if (!event.candidate) {
-          // ICE gathering complete; update SDP text areas accordingly
-          if (document.getElementById('offerSDP').value === "") {
+          // ICE gathering complete; update the appropriate SDP text area based on role.
+          if (role === "caller" && document.getElementById('offerSDP').value === "") {
             const offerSDP = JSON.stringify(pc.localDescription);
             document.getElementById('offerSDP').value = offerSDP;
             logDebug("Offer SDP ready", offerSDP);
-          } else if (document.getElementById('answerSDP_out').value === "") {
+          } else if (role === "callee" && document.getElementById('answerSDP_out').value === "") {
             const answerSDP = JSON.stringify(pc.localDescription);
             document.getElementById('answerSDP_out').value = answerSDP;
             logDebug("Answer SDP ready", answerSDP);
@@ -220,7 +220,6 @@
       pc.onsignalingstatechange = () => {
         logDebug("Signaling state", pc.signalingState);
       };
-      // If supported, log ICE candidate errors
       if ('onicecandidateerror' in pc) {
         pc.onicecandidateerror = event => {
           console.error("ICE Candidate Error:", event);
@@ -232,6 +231,7 @@
 
     // Caller: Create an offer and wait for ICE gathering to complete
     function createOffer() {
+      role = "caller";
       console.log("Creating offer...");
       pc = new RTCPeerConnection(configuration);
       addPeerConnectionLogging(pc);
@@ -251,7 +251,7 @@
           return pc.setLocalDescription(offer);
         })
         .then(() => {
-          console.log("Local description set for offer");
+          console.log("Local description set for offer:", pc.localDescription);
         })
         .catch(err => {
           console.error("Error creating offer:", err);
@@ -281,6 +281,7 @@
 
     // Callee: Create an answer from a pasted offer
     function createAnswer() {
+      role = "callee";
       console.log("Creating answer...");
       pc = new RTCPeerConnection(configuration);
       addPeerConnectionLogging(pc);
