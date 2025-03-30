@@ -2,50 +2,103 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>P2P Chat Client</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
-    textarea { width: 100%; margin-bottom: 10px; }
-    #chatLog {
-      width: 100%; height: 300px; border: 1px solid #ccc;
-      padding: 5px; overflow-y: scroll; margin-bottom: 10px;
-      background: #f9f9f9;
+    /* Dark mode (default) and light mode styles v2*/
+    body.dark {
+      background-color: #121212;
+      color: #e0e0e0;
     }
-    .section { border: 1px solid #ddd; padding: 10px; margin-bottom: 20px; }
+    body.light {
+      background-color: #f0f0f0;
+      color: #000;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      line-height: 1.6;
+    }
+    input, textarea, button {
+      font-size: 1rem;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      cursor: pointer;
+    }
+    #chatLog {
+      width: 100%;
+      height: 300px;
+      border: 1px solid #444;
+      padding: 10px;
+      overflow-y: auto;
+      background: #1e1e1e;
+      color: #fff;
+    }
+    .section {
+      border: 1px solid #444;
+      padding: 10px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+    }
+    .toggle-container {
+      text-align: right;
+      margin-bottom: 10px;
+    }
+    @media (min-width: 600px) {
+      .flex-container {
+        display: flex;
+        gap: 20px;
+      }
+      .flex-container > div {
+        flex: 1;
+      }
+    }
   </style>
 </head>
-<body>
-  <h2>P2P Chat Client</h2>
+<body class="dark">
+  <div class="toggle-container">
+    <button onclick="toggleDarkMode()">Toggle Dark/Light Mode</button>
+  </div>
 
-  <!-- Caller Section: Create Offer v1-->
+  <h2>P2P Chat Client - Manual Signalling</h2>
+  <div id="instructions" class="section">
+    <h3>Instructions</h3>
+    <ol>
+      <li><strong>Caller:</strong> Click "Create Offer" to generate an SDP offer. Copy the generated text and share it with your peer via WhatsApp, phone, etc.</li>
+      <li><strong>Callee:</strong> Paste the received Offer SDP into the "Callee" section and click "Create Answer". Copy the generated Answer SDP and send it back to the caller.</li>
+      <li><strong>Caller:</strong> Paste the Answer SDP into the "Caller" section and click "Accept Answer" to establish the connection.</li>
+      <li>Once connected, a "Connected: Ready to chat!" message will appear in the chat log.</li>
+      <li>You can send text messages and small file attachments (e.g., images).</li>
+      <li>Debug logs are printed to the browser console for troubleshooting.</li>
+    </ol>
+  </div>
+
   <div class="section">
     <h3>Caller (Create Offer)</h3>
     <button onclick="createOffer()">Create Offer</button>
-    <br>
     <textarea id="offerSDP" placeholder="Your offer SDP (copy and send to your peer)" rows="5"></textarea>
-    <br>
     <textarea id="answerSDP" placeholder="Paste answer SDP here" rows="5"></textarea>
-    <br>
     <button onclick="acceptAnswer()">Accept Answer</button>
   </div>
 
-  <!-- Callee Section: Create Answer -->
   <div class="section">
     <h3>Callee (Create Answer)</h3>
     <textarea id="offerSDP_in" placeholder="Paste offer SDP here" rows="5"></textarea>
-    <br>
     <button onclick="createAnswer()">Create Answer</button>
-    <br>
     <textarea id="answerSDP_out" placeholder="Your answer SDP (copy and send back)" rows="5"></textarea>
   </div>
 
-  <!-- Chat Section -->
   <div class="section">
     <h3>Chat</h3>
     <div id="chatLog"></div>
-    <input type="text" id="msgInput" placeholder="Type your message here" style="width:80%;">
+    <input type="text" id="msgInput" placeholder="Type your message here">
     <button onclick="sendMessage()">Send</button>
-    <br><br>
     <input type="file" id="fileInput">
     <button onclick="sendFile()">Send File</button>
   </div>
@@ -55,83 +108,157 @@
     let pc, dataChannel;
     const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-    // Utility function to log messages to the chat area
+    // Utility function to log messages to the chat area and console
     function logMessage(msg) {
       const chatLog = document.getElementById('chatLog');
       chatLog.innerHTML += `<div>${msg}</div>`;
       chatLog.scrollTop = chatLog.scrollHeight;
+      console.log("Chat Log:", msg);
     }
 
-    // Setup the data channel event handlers
+    // Toggle between dark and light mode
+    function toggleDarkMode() {
+      const body = document.body;
+      if (body.classList.contains('dark')) {
+        body.classList.remove('dark');
+        body.classList.add('light');
+        console.log("Switched to light mode");
+      } else {
+        body.classList.remove('light');
+        body.classList.add('dark');
+        console.log("Switched to dark mode");
+      }
+    }
+
+    // Setup the data channel event handlers with debugging logs
     function setupDataChannel() {
-      dataChannel.onopen = () => logMessage("<em>DataChannel is open</em>");
+      dataChannel.onopen = () => {
+        logMessage("<em>DataChannel is open</em>");
+        console.log("DataChannel opened");
+      };
       dataChannel.onmessage = event => {
+        console.log("DataChannel message received:", event.data);
         try {
           const received = JSON.parse(event.data);
           if (received.type === 'text') {
             logMessage("<b>Peer:</b> " + received.data);
           } else if (received.type === 'file') {
-            // Display file attachments (assuming image files)
             logMessage(`<b>Peer sent file:</b> ${received.name}<br><img src="${received.data}" alt="${received.name}" style="max-width:200px;">`);
           }
         } catch (e) {
-          logMessage("Received: " + event.data);
+          logMessage("Received non-JSON message: " + event.data);
+          console.error("Error parsing message:", e);
         }
       };
-      dataChannel.onerror = error => console.error("DataChannel Error:", error);
+      dataChannel.onerror = error => {
+        console.error("DataChannel error:", error);
+      };
+      dataChannel.onclose = () => {
+        logMessage("<em>DataChannel closed</em>");
+        console.log("DataChannel closed");
+      };
     }
 
     // --- Signalling Functions ---
 
     // Caller: Create an offer and wait for ICE gathering to complete
     function createOffer() {
+      console.log("Creating offer...");
       pc = new RTCPeerConnection(configuration);
       dataChannel = pc.createDataChannel("chat");
       setupDataChannel();
 
-      // When ICE gathering is complete, output the SDP offer
       pc.onicecandidate = event => {
+        console.log("ICE candidate event:", event);
         if (!event.candidate) {
-          document.getElementById('offerSDP').value = JSON.stringify(pc.localDescription);
+          const offerSDP = JSON.stringify(pc.localDescription);
+          document.getElementById('offerSDP').value = offerSDP;
+          console.log("Offer SDP ready:", offerSDP);
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        console.log("Connection state change:", pc.connectionState);
+        if (pc.connectionState === "connected") {
+          logMessage("<em>Connected: Ready to chat!</em>");
         }
       };
 
       pc.createOffer()
-        .then(offer => pc.setLocalDescription(offer))
-        .catch(err => console.error(err));
+        .then(offer => {
+          console.log("Offer created:", offer);
+          return pc.setLocalDescription(offer);
+        })
+        .then(() => {
+          console.log("Local description set for offer");
+        })
+        .catch(err => {
+          console.error("Error creating offer:", err);
+        });
     }
 
     // Caller: Accept the answer provided by the peer
     function acceptAnswer() {
       const answer = document.getElementById('answerSDP').value;
       if (answer) {
-        const answerDesc = new RTCSessionDescription(JSON.parse(answer));
-        pc.setRemoteDescription(answerDesc).catch(err => console.error(err));
+        try {
+          const answerDesc = new RTCSessionDescription(JSON.parse(answer));
+          pc.setRemoteDescription(answerDesc)
+            .then(() => {
+              console.log("Remote description set with answer");
+            })
+            .catch(err => {
+              console.error("Error setting remote description:", err);
+            });
+        } catch (e) {
+          console.error("Invalid answer SDP format:", e);
+        }
+      } else {
+        console.error("No answer SDP provided");
       }
     }
 
     // Callee: Create an answer from a pasted offer
     function createAnswer() {
+      console.log("Creating answer...");
       pc = new RTCPeerConnection(configuration);
       pc.ondatachannel = event => {
         dataChannel = event.channel;
         setupDataChannel();
+        console.log("DataChannel received from caller");
       };
 
       const offer = document.getElementById('offerSDP_in').value;
       if (offer) {
-        const offerDesc = new RTCSessionDescription(JSON.parse(offer));
-        pc.setRemoteDescription(offerDesc)
-          .then(() => pc.createAnswer())
-          .then(answer => pc.setLocalDescription(answer))
-          .then(() => {
-            pc.onicecandidate = event => {
-              if (!event.candidate) {
-                document.getElementById('answerSDP_out').value = JSON.stringify(pc.localDescription);
-              }
-            };
-          })
-          .catch(err => console.error(err));
+        try {
+          const offerDesc = new RTCSessionDescription(JSON.parse(offer));
+          pc.setRemoteDescription(offerDesc)
+            .then(() => {
+              console.log("Remote description set with offer");
+              return pc.createAnswer();
+            })
+            .then(answer => {
+              console.log("Answer created:", answer);
+              return pc.setLocalDescription(answer).then(() => answer);
+            })
+            .then(answer => {
+              pc.onicecandidate = event => {
+                console.log("ICE candidate event (callee):", event);
+                if (!event.candidate) {
+                  const answerSDP = JSON.stringify(pc.localDescription);
+                  document.getElementById('answerSDP_out').value = answerSDP;
+                  console.log("Answer SDP ready:", answerSDP);
+                }
+              };
+            })
+            .catch(err => {
+              console.error("Error creating answer:", err);
+            });
+        } catch (e) {
+          console.error("Invalid offer SDP format:", e);
+        }
+      } else {
+        console.error("No offer SDP provided");
       }
     }
 
@@ -141,11 +268,14 @@
     function sendMessage() {
       const msgInput = document.getElementById('msgInput');
       const msg = msgInput.value;
+      console.log("Attempting to send message:", msg);
       if (msg && dataChannel && dataChannel.readyState === "open") {
         const messageObj = { type: "text", data: msg };
         dataChannel.send(JSON.stringify(messageObj));
         logMessage("<b>You:</b> " + msg);
         msgInput.value = "";
+      } else {
+        console.error("DataChannel not open or message is empty.");
       }
     }
 
@@ -154,6 +284,7 @@
       const fileInput = document.getElementById('fileInput');
       if (fileInput.files.length > 0 && dataChannel && dataChannel.readyState === "open") {
         const file = fileInput.files[0];
+        console.log("Attempting to send file:", file.name);
         const reader = new FileReader();
         reader.onload = event => {
           const fileData = event.target.result;
@@ -161,7 +292,12 @@
           dataChannel.send(JSON.stringify(messageObj));
           logMessage("<b>You sent file:</b> " + file.name);
         };
+        reader.onerror = error => {
+          console.error("Error reading file:", error);
+        };
         reader.readAsDataURL(file);
+      } else {
+        console.error("No file selected or DataChannel not open.");
       }
     }
   </script>
